@@ -6,7 +6,7 @@ require("config.lazy")
 
 -- lspconfig --
 
-vim.lsp.enable({ "lua_ls", "jdtls", "clangd" })
+vim.lsp.enable({ "lua_ls", "clangd" }) -- jdtls is started by nvim-jdtls (after/ftplugin/java.lua)
 
 -- Key Maps --
 
@@ -14,6 +14,7 @@ vim.keymap.set("n", "<space><space>x", "<cmd>source %<CR>")
 vim.keymap.set("n", "<space>x", ":.lua<CR>")
 vim.keymap.set("v", "<space>x", ":lua<CR>")
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
+vim.keymap.set('n', 'gd', vim.lsp.buf.definition, { desc = 'LSP Go to Definition' })
 
 -- general options --
 

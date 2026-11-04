@@ -41,6 +41,22 @@ Inside a picker: `<C-n>`/`<C-p>` move, `<CR>` open, `<C-x>` split, `<C-v>` vspli
 | `:LspInfo` | Show attached LSP clients |
 | `:LspRestart` | Restart LSP for the buffer |
 
+## Debugger — nvim-dap (`<leader>d…`)
+
+Java is set up via nvim-jdtls; full guide in `java_debugging.md`.
+
+| Key | What it does |
+|---|---|
+| `<leader>db` | Toggle breakpoint on current line |
+| `<leader>dc` | Start debugging / continue to next breakpoint |
+| `<leader>do` | Step over |
+| `<leader>di` | Step into |
+| `<leader>dO` | Step out |
+| `<leader>dr` | Open debug REPL |
+| `<leader>dt` | Terminate the program |
+| `:DapClearBreakpoints` | Remove all breakpoints |
+| `:JdtUpdateHotcode` | Apply saved code changes to the running Java program |
+
 ## Plugins / maintenance
 
 | Command | What it does |
