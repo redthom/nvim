@@ -7,6 +7,10 @@ set.relativenumber = true
 
 -- jdtls (via nvim-jdtls) --
 
+-- skip unnamed/scratch and non-file (jdt://) buffers
+local fname = vim.api.nvim_buf_get_name(0)
+if fname == '' or not vim.uv.fs_stat(fname) then return end
+
 -- project root = parent of the nearest `src` directory
 local src = vim.fs.find('src', { upward = true, type = 'directory', path = vim.fs.dirname(vim.api.nvim_buf_get_name(0)) })[1]
 if not src then return end
