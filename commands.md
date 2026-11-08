@@ -57,6 +57,18 @@ Java is set up via nvim-jdtls; full guide in `java_debugging.md`.
 | `:DapClearBreakpoints` | Remove all breakpoints |
 | `:JdtUpdateHotcode` | Apply saved code changes to the running Java program |
 
+## Java tests — JUnit (`<leader>t…`, Java buffers only)
+
+Setup and project layouts are in `java_debugging.md` ("Running JUnit tests").
+
+| Key | What it does |
+|---|---|
+| `<leader>tc` | Run every test in the current class |
+| `<leader>tm` | Run the test method under the cursor |
+| `<leader>tp` | Pick a test from a list and run it |
+| `<leader>ts` | Jump between a test and the class it tests |
+| `<leader>tg` | Generate tests for the current class |
+
 ## Plugins / maintenance
 
 | Command | What it does |

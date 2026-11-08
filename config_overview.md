@@ -12,6 +12,8 @@ For keymaps see `commands.md`. For the Java debugger see `java_debugging.md`.
 ├── lua/
 │   ├── config/
 │   │   └── lazy.lua          installs lazy.nvim and sets the plugin list
+│   ├── java/
+│   │   └── init.lua          starts jdtls: project root, debug/test bundles, test keymaps
 │   └── plugins/              one file per plugin, all loaded by `{ import = "plugins" }`
 │       ├── dap.lua           nvim-dap (debugger) + <leader>d… keymaps
 │       ├── jdtls.lua         nvim-jdtls (Java language server + debugger wiring)
@@ -24,7 +26,7 @@ For keymaps see `commands.md`. For the Java debugger see `java_debugging.md`.
 ├── after/ftplugin/           per-filetype settings, run when a file of that type opens
 │   ├── c.lua
 │   ├── gitcommit.lua
-│   ├── java.lua              Java settings + starts jdtls
+│   ├── java.lua              Java settings + calls require('java').attach()
 │   ├── lua.lua
 │   └── markdown.lua
 └── plugins/test.lua          NOT loaded (see "Notes" at the bottom)
@@ -42,7 +44,7 @@ For keymaps see `commands.md`. For the Java debugger see `java_debugging.md`.
 5. Later, whenever you open a file, Neovim detects its filetype and then:
    - runs the matching `after/ftplugin/<filetype>.lua`
    - starts any enabled LSP server for that filetype (`lua_ls` for Lua, `clangd` for C/C++)
-   - for Java, `after/ftplugin/java.lua` starts jdtls itself
+   - for Java, `after/ftplugin/java.lua` calls `lua/java/init.lua`, which starts jdtls
 
 ## `init.lua`
 
@@ -110,7 +112,7 @@ Also, calling `require('x')` on a plugin that hasn't loaded yet makes lazy load 
 
 ### `jdtls.lua`: Java support (nvim-jdtls)
 - Installs `mfussenegger/nvim-jdtls`. It's lazy-loaded when you open a Java file (`ft = 'java'`) and depends on nvim-dap, so nvim-dap loads first.
-- The actual configuration is in `after/ftplugin/java.lua`, because it has to run once for every Java buffer.
+- The actual configuration is in `lua/java/init.lua`. `after/ftplugin/java.lua` calls it once for every Java buffer.
 
 ## `lsp/lua_ls.lua`
 
@@ -127,27 +129,39 @@ Files in `after/ftplugin/` run **after** Neovim's built-in settings for that fil
 | `lua.lua` | 2-space indent, line numbers |
 | `markdown.lua` | 4-space indent, spell check, soft line wrap, line numbers |
 | `gitcommit.lua` | guide columns at 51 and 73 (subject/body length), spell check |
-| `java.lua` | 4-space indent, line numbers, **and starts jdtls** (below) |
+| `java.lua` | 4-space indent, line numbers, **and starts jdtls** via `require('java').attach()` (below) |
 
-### `after/ftplugin/java.lua` in detail
+### `lua/java/init.lua` in detail
 
-1. **Formatting:** 4-space indent and line numbers, like `c.lua`.
-2. **Find the project root:** looks upward from the file for the nearest `src` folder and uses the folder above it as the root. If there's no `src` folder, the script stops here and jdtls doesn't start for that file.
-3. **Find the java-debug jar:** looks for `com.microsoft.java.debug.plugin-*.jar` in `~/.local/share/java-debug/`. That jar is an extension that jdtls loads so you can debug. If it's missing, you get a warning once per Neovim session and everything works except debugging.
-4. **Workspace folder:** jdtls stores its project index in `~/.cache/nvim/jdtls/workspace/<project-folder-name>`, one per project.
-5. **`require('jdtls').start_or_attach({...})`:**
-   - `cmd`: runs your manually installed jdtls (`~/.local/share/jdtls/bin/jdtls`) with `-data <workspace>`.
-   - `root_dir`: the root found in step 2. If a jdtls for this root is already running, the buffer attaches to it instead of starting a second one.
-   - `init_options.bundles`: the java-debug jar, which jdtls loads as an extension.
-   - `settings.java`: treats `src` as the source folder, and stops jdtls from writing `.project`/`.classpath` files into your project.
-6. When jdtls is ready, nvim-jdtls sees that java-debug is loaded and registers a `java` debug adapter with nvim-dap. It also adds `:JdtUpdateDebugConfig` and `:JdtUpdateHotcode`.
+`after/ftplugin/java.lua` sets 4-space indent and line numbers, then calls `require('java').attach()`. That function:
+
+1. **Skips buffers that aren't real files**, such as scratch buffers and `jdt://` class-file buffers.
+2. **Finds the project root** (`find_root`):
+   - First it looks upward for a build file (`pom.xml`, `mvnw`, `build.gradle(.kts)`, `settings.gradle(.kts)`, `gradlew`). This is a **Maven/Gradle project**, and jdtls reads the classpath, including JUnit, from the build file.
+   - Otherwise it uses the nearest folder upward that contains `src`, `test` or `.git`. This is a **plain project**.
+   - If it finds neither, jdtls doesn't start for that file.
+3. **Collects bundles**, the extension jars that jdtls loads:
+   - java-debug (`~/.local/share/java-debug/com.microsoft.java.debug.plugin-*.jar`), used for debugging.
+   - vscode-java-test (`~/.local/share/vscode-java-test/extension/server/*.jar`), used for running tests. It leaves out `com.microsoft.java.test.runner-jar-with-dependencies.jar` and `jacocoagent.jar`, as nvim-jdtls says to.
+   - A missing bundle gives one warning per session. Everything else keeps working.
+4. **Settings:**
+   - Every project: jdtls doesn't write `.project`/`.classpath` files into your project.
+   - Plain projects also get:
+     - whichever of `src` and `test` exist as source folders,
+     - every `lib/**/*.jar` on the classpath (this is where the JUnit jar goes),
+     - compiled output in `bin/`.
+5. **Workspace folder:** `~/.cache/nvim/jdtls/workspace/<project-name>-<hash>`, one per project. The hash keeps two projects with the same folder name apart.
+6. **`require('jdtls').start_or_attach({...})`** starts the jdtls in `~/.local/share/jdtls/bin/jdtls`. If one is already running for that root, it attaches the buffer to it. `on_attach` adds the buffer-local `<leader>t…` test keymaps.
+7. When jdtls is ready, nvim-jdtls registers a `java` debug adapter with nvim-dap. It also adds `:JdtUpdateDebugConfig` and `:JdtUpdateHotcode`. Tests run as debug sessions, so breakpoints in tests work.
 
 ## External tools this config expects (installed manually, no Mason)
 
 | Tool | Location | Used by |
 |---|---|---|
-| jdtls | `~/.local/share/jdtls/` | `after/ftplugin/java.lua` |
-| java-debug jar | `~/.local/share/java-debug/` | Java debugging |
+| jdtls | `~/.local/share/jdtls/` | `lua/java/init.lua` |
+| java-debug jar | `~/.local/share/java-debug/` | Java debugging (and running tests) |
+| vscode-java-test | `~/.local/share/vscode-java-test/` | Running JUnit tests |
+| JUnit console-standalone jar | `<project>/lib/` (plain projects only) | JUnit on the classpath |
 | lua-language-server, clangd | on `PATH` | `vim.lsp.enable` |
 | ripgrep (`rg`), fd | on `PATH` | telescope |
 | `make`, a C compiler | on `PATH` | building telescope-fzf-native |

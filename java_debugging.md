@@ -1,11 +1,13 @@
 # Debugging Java in Neovim
 
-Uses **nvim-dap** (debugger client), **nvim-jdtls** (Java language server integration) and the **java-debug** extension that runs inside jdtls.
+Uses **nvim-dap** (debugger client), **nvim-jdtls** (Java language server integration), and the **java-debug** and **vscode-java-test** extensions that run inside jdtls. JUnit tests are covered under "Running JUnit tests".
 How they're wired together is covered in `config_overview.md`.
 
 ## Before you start
 
-- **The project needs a `src` folder.** jdtls treats the folder above `src` as the project root. If a Java file isn't under a `src` folder, jdtls doesn't start and you can't debug it.
+- **jdtls has to find the project root.** If it can't, jdtls doesn't start and you can't debug. The root is:
+  - the nearest folder with a `pom.xml` / `build.gradle` (or `mvnw`, `gradlew`, `settings.gradle`), or
+  - otherwise, the nearest folder that contains `src`, `test` or `.git`.
   ```
   myproject/
   └── src/
@@ -62,6 +64,63 @@ These are available in any Java buffer.
 | `:JdtUpdateHotcode` | Apply code changes to the running program without restarting (hot code replace). Save the file first. Works for changes inside method bodies, not for new methods or fields. |
 | `:JdtUpdateDebugConfig` | Re-scan the project for `main` methods (after you add a new one) |
 | `:JdtCompile` | Compile the project to check for build errors |
+
+## Running JUnit tests
+
+Tests run through the **vscode-java-test** extension inside jdtls, and each test run is a debug session. Breakpoints in tests (or in the code they call) stop like they do in normal debugging.
+
+### One-time install (no Mason)
+
+The `.vsix` file is a zip archive. The jars jdtls needs are in `extension/server/`.
+```sh
+V=0.47.0; mkdir -p ~/.local/share/vscode-java-test && cd ~/.local/share/vscode-java-test && \
+  curl -fLo t.vsix https://open-vsx.org/api/vscjava/vscode-java-test/$V/file/vscjava.vscode-java-test-$V.vsix && \
+  unzip -oq t.vsix && rm t.vsix
+```
+Restart Neovim afterwards. If the jars are missing you get `vscode-java-test jars not found` when you open a Java file.
+
+### Getting JUnit onto the classpath
+
+**Maven/Gradle:** add JUnit 5 to the build file, and jdtls picks it up.
+```xml
+<dependency>
+  <groupId>org.junit.jupiter</groupId>
+  <artifactId>junit-jupiter</artifactId>
+  <version>5.14.4</version>
+  <scope>test</scope>
+</dependency>
+```
+```
+myproject/
+├── pom.xml
+└── src/
+    ├── main/java/demo/Calc.java
+    └── test/java/demo/CalcTest.java
+```
+
+**Plain project (no build tool):** put the JUnit console-standalone jar in `lib/`. Every `lib/**/*.jar` is added to the classpath, and `src/` and `test/` are both source folders.
+```sh
+mkdir -p lib && curl -fLo lib/junit-platform-console-standalone-1.14.4.jar \
+  https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.14.4/junit-platform-console-standalone-1.14.4.jar
+```
+```
+myproject/
+├── lib/junit-platform-console-standalone-1.14.4.jar
+├── src/Calc.java
+└── test/CalcTest.java
+```
+
+### Keys (in Java buffers)
+
+| Key | Action |
+|---|---|
+| `<leader>tc` | Run every test in the current class |
+| `<leader>tm` | Run the test method under the cursor |
+| `<leader>tp` | Pick a test from a list and run it |
+| `<leader>ts` | Jump between a test and the class it tests |
+| `<leader>tg` | Generate tests for the current class |
+
+Results appear in the DAP REPL (`<leader>dr`): `✓` means passed, and `✗` means failed, followed by the assertion message and stack trace. Program output goes to the `[dap-terminal]` split.
 
 ## Special breakpoints
 
@@ -149,8 +208,10 @@ Other launch options: `vmArgs = '-Xmx512m'`, `cwd = '/some/dir'`, `env = { KEY =
 
 | Problem | Fix |
 |---|---|
-| `<leader>dc` says there are no configurations | jdtls isn't running for this file. Check that the file is under a `src` folder, then run `:checkhealth vim.lsp` and look for `jdtls`. |
+| `<leader>dc` says there are no configurations | jdtls isn't running for this file. Check that a project root can be found (see "Before you start"), then run `:checkhealth vim.lsp` and look for `jdtls`. |
 | Warning: `java-debug jar not found` | Install the jar (see "Before you start") and restart Neovim. |
+| Warning: `vscode-java-test jars not found`, or `<leader>tc` does nothing | Install vscode-java-test (see "Running JUnit tests") and restart Neovim. |
+| `org.junit` imports are red / "no tests found" | JUnit isn't on the classpath. Maven/Gradle: add the dependency. Plain project: put the console-standalone jar in `lib/`, then `:JdtUpdateConfig` or `:JdtRestart`. |
 | Debugging stopped working after adding a new class with `main` | Run `:JdtUpdateDebugConfig`. |
 | Breakpoint shows `R` (rejected) or the program never stops | The line has no runnable code (blank line, comment, a lone `}`). Move the breakpoint to a line with a statement. |
 | jdtls seems confused (old errors, missing classes) | `:JdtRestart`. If that doesn't help, delete `~/.cache/nvim/jdtls/workspace/<project>` and reopen. |
